@@ -1,0 +1,8 @@
+intLiteral      10
+-               -
+intLiteral      5
++               +
+intLiteral      2
+intLiteral      50
+/               /
+intLiteral	4
