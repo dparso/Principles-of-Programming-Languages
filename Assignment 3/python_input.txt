@@ -1,0 +1,16 @@
+type	int
+id	x
+;	;
+id	x
+=	=
+intLiteral	10
+-	-
+intLiteral	5
++	+
+intLiteral	4
+/	/
+intLiteral	2
+;	;
+print	print
+id	x
+;	;
