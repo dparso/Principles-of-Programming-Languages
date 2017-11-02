@@ -26,7 +26,7 @@ id	var2
 if	if
 (	(
 id	var2
-relOp	<
+relOp	>
 intLiteral	2
 multOp	*
 id	var1

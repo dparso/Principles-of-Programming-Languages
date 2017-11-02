@@ -61,7 +61,7 @@ def main(inputFileName):
         if tokenStream[iNextToken] == "}":
             iNextToken += 1
 
-    print iNextToken, len(tokenStream)
+    print "Consumed " + str(iNextToken) + " of " + str(len(tokenStream)) + " tokens."
 
     if iNextToken < len(tokenStream):
         error()
@@ -165,7 +165,7 @@ def statements():
     stack.pop()
 
 
-def statement():
+def statement(execute=True):
     global iNextToken, stack, symTable
 
     stack.append("statement")
@@ -179,16 +179,16 @@ def statement():
             declarationError(lexemeStream[iNextToken])
         name = lexemeStream[iNextToken]
         iNextToken += 1
-        assignment(name)
+        assignment(name, execute)
     elif tokenStream[iNextToken] == "print":
         iNextToken += 1
         printStmt()
     elif tokenStream[iNextToken] == "if":
         iNextToken += 1
-        ifStmt()
+        ifStmt(execute)
     elif tokenStream[iNextToken] == "while":
         iNextToken += 1
-        whileStmt()
+        whileStmt(execute)
     elif tokenStream[iNextToken] == "return":
         iNextToken += 1
         returnStmt()
@@ -198,7 +198,7 @@ def statement():
     stack.pop()
 
 
-def assignment(varName):
+def assignment(varName, execute=True):
     global iNextToken, stack
     # remaining is assignOp Expression
     stack.append("assignment")
@@ -206,7 +206,8 @@ def assignment(varName):
         iNextToken += 1
         value = expr()
         # check types!
-        symTable[varName][1] = value
+        if execute:
+            symTable[varName][1] = value
         closeStatement()
         stack.pop()
         return
@@ -220,7 +221,7 @@ def printStmt():
     stack.append("print")
     if iNextToken < len(tokenStream):
         result = expr()
-        print "Print returned " + str(result)
+        print result
         closeStatement()
         stack.pop()
         return
@@ -228,7 +229,7 @@ def printStmt():
         error()
 
 
-def ifStmt():
+def ifStmt(execute=True):
     global iNextToken, stack
 
     # must include parentheses
@@ -238,14 +239,19 @@ def ifStmt():
     else:
         error("Incomplete if statement.")
 
-    expr()
+    result = expr()
 
     if iNextToken < len(tokenStream) and tokenStream[iNextToken] == ")":
         iNextToken += 1
     else:
         error("Incomplete if statement")
 
-    statement()
+    # careful with what's executed: an inner if might not run if its outer loop doesn't
+    if execute:
+        statement(bool(result))
+    else:
+        # here, no matter what result was, this should not run, as its outer loop doesn't run
+        statement(False)
 
     if iNextToken < len(tokenStream) and tokenStream[iNextToken] == "else":
         # another statement!
@@ -255,7 +261,7 @@ def ifStmt():
     stack.pop()
 
 
-def whileStmt():
+def whileStmt(execute=True):
     global iNextToken, stack
 
     stack.append("while")
@@ -272,7 +278,11 @@ def whileStmt():
     else:
         error("Incomplete while statement")
 
-    statement()
+    # see ifStmt for logic
+    if execute:
+        statement(bool(result))
+    else:
+        statement(False)
 
     stack.pop()
 
@@ -426,7 +436,7 @@ def factor():
         error()
 
 
-def error(message = ""):
+def error(message=""):
     if message != "":
         print("Error: " + message + " Error location: < " + tokenStream[iNextToken] + ", " + lexemeStream[iNextToken] + " >.")
     elif iNextToken < len(tokenStream):
@@ -448,6 +458,9 @@ def declarationError(varName):
 if __name__ == "__main__":
     main(sys.argv[1])
 
+# Note that the execute parameter doesn't need to be passed to
+# functions like printStmt & returnStmt, as they only deal with expressions,
+# and expressions are not assignments, so nothing can be changed
 
 # need:
 """
