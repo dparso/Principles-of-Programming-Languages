@@ -9,15 +9,28 @@
 # Output: True iff no syntax error
 
 import sys
+import operator
 
 # Use global vars because it's well past midnight, otherwise it's a crime
-iNextToken = 0  #Next token index
+iNextToken = 0  # Next token index
 stack = []
 tokenStream = []
-lexemeStream = []  #not used for parsing
+lexemeStream = []  # not used for parsing
 symTable = {}
 stmtStart = ["print", "if", "while", "return", "id"]
 literals = ["intLiteral", "boolLiteral", "floatLiteral", "charLiteral"]
+operators = {  # easy transition from string to operator, no 'if x == "+" etc.' necessary
+    '>': operator.gt,
+    '>=': operator.ge,
+    '<': operator.lt,
+    '<=': operator.le,
+    '+': operator.add,
+    '-': operator.sub,
+    '==': operator.eq,
+    '!=': operator.ne,
+    '*': operator.mul,
+    '/': operator.truediv
+}
 
 
 def main(inputFileName):
@@ -36,7 +49,7 @@ def main(inputFileName):
     print("Tokens:", tokenStream)
     print("Lexemes:", lexemeStream)
 
-    if len(tokenStream) < 6: # must be at least type, main, (, ), {, }
+    if len(tokenStream) < 6:  # must be at least type, main, (, ), {, }
         error()
 
     program()
@@ -60,7 +73,7 @@ def program():
     global iNextToken, stack
     stack.append("program")
 
-    if tokenStream[:5] == ["type", "main", "(", ")", "{"]: # program must start with these tokens, excepting imports or global var declarations
+    if tokenStream[:5] == ["type", "main", "(", ")", "{"]:  # program must start with these tokens, excepting imports or global var declarations
         iNextToken += 5
         declarations()
         statements()
@@ -118,9 +131,10 @@ def id(isDeclaring):
 
     if iNextToken < len(tokenStream) and tokenStream[iNextToken] == "id":
         # consume an id
+        varName = lexemeStream[iNextToken]
+
         if isDeclaring:
             # store the variable
-            varName = lexemeStream[iNextToken]
             if varName in symTable:
                 # rule 1: check if name is taken
                 error("Variable name taken.")
@@ -135,7 +149,7 @@ def id(isDeclaring):
 
         iNextToken += 1
         stack.pop()
-        return
+        return symTable[varName][1]
     else:
         error()
 
@@ -153,12 +167,12 @@ def statements():
 
 def statement():
     global iNextToken, stack, symTable
-    
+
     stack.append("statement")
 
     if iNextToken >= len(tokenStream):
         error()
-    
+
     if tokenStream[iNextToken] == "id":
         # check if declared
         if not lexemeStream[iNextToken] in symTable:
@@ -183,6 +197,7 @@ def statement():
 
     stack.pop()
 
+
 def assignment(varName):
     global iNextToken, stack
     # remaining is assignOp Expression
@@ -198,21 +213,24 @@ def assignment(varName):
     else:
         error()
 
+
 def printStmt():
     global iNextToken, stack
-    
+
     stack.append("print")
     if iNextToken < len(tokenStream):
-        expr()
+        result = expr()
+        print "Print returned " + str(result)
         closeStatement()
         stack.pop()
         return
     else:
         error()
 
+
 def ifStmt():
     global iNextToken, stack
-    
+
     # must include parentheses
     stack.append("if")
     if iNextToken < len(tokenStream) and tokenStream[iNextToken] == "(":
@@ -236,17 +254,18 @@ def ifStmt():
 
     stack.pop()
 
+
 def whileStmt():
     global iNextToken, stack
-    
+
     stack.append("while")
-    
+
     if iNextToken < len(tokenStream) and tokenStream[iNextToken] == "(":
         iNextToken += 1
     else:
         error("Incomplete while statement.")
-    
-    expr()
+
+    result = expr()
 
     if iNextToken < len(tokenStream) and tokenStream[iNextToken] == ")":
         iNextToken += 1
@@ -257,61 +276,80 @@ def whileStmt():
 
     stack.pop()
 
+
 def returnStmt():
     global iNextToken, stack
-    
+
     stack.append("return")
     if iNextToken < len(tokenStream):
-        expr()
+        result = expr()
         closeStatement()
     else:
         error()
 
     stack.pop()
+    return result
+
 
 def expr():
     global iNextToken, stack
-    
+
     stack.append("expr")
     # consume single conjunction
-    conjunction()
-    while iNextToken < len(tokenStream) and \
-        (tokenStream[iNextToken] == "||"):
-        iNextToken += 1 # consume ||
-        conjunction() # consume another conjunction
+    result = conjunction()
+    while iNextToken < len(tokenStream) and (tokenStream[iNextToken] == "||"):
+        iNextToken += 1  # consume ||
+        value = conjunction()  # consume another conjunction
+        result = result or conjunction
+
     stack.pop()
+    return result
+
 
 def conjunction():
     global iNextToken, stack
 
     stack.append("conjunction")
-    equality()
+    result = equality()
     # as many equalities as separated by &&
     while iNextToken < len(tokenStream) and tokenStream[iNextToken] == "&&":
         iNextToken += 1
-        equality()
+        value = equality()
+        result = result and value
+
     stack.pop()
+    return result
+
 
 def equality():
     global iNextToken, stack
 
     stack.append("equality")
-    relation()
+    result = relation()
 
     if iNextToken < len(tokenStream) and tokenStream[iNextToken] == "equOp":
+        op = lexemeStream[iNextToken]
         iNextToken += 1
-        relation()
+        value = relation()
+        result = operators[op](result, value)
+
     stack.pop()
+    return result
+
 
 def relation():
     global iNextToken, stack
     stack.append("relation")
-    addition()
+    result = addition()
 
     if iNextToken < len(tokenStream) and tokenStream[iNextToken] == "relOp":
+        compare = lexemeStream[iNextToken]
         iNextToken += 1
-        addition()
+        value = addition()
+        result = operators[compare](result, value)
+
     stack.pop()
+    return result
 
 
 def addition():
@@ -319,12 +357,15 @@ def addition():
 
     stack.append("addition")
 
-    term()  #Consume a Term first
-    while iNextToken < len(tokenStream) and \
-        (tokenStream[iNextToken] == "addOp"):
-        iNextToken += 1  #Consumed the + or - token
-        term()  #Consume another Term
+    result = term()  # Consume a Term first
+    while iNextToken < len(tokenStream) and (tokenStream[iNextToken] == "addOp"):
+        op = lexemeStream[iNextToken]
+        iNextToken += 1  # Consumed the + or - token
+        value = term()  # Consume another Term
+        result = operators[op](result, value)
+
     stack.pop()
+    return result
 
 
 def term():
@@ -332,12 +373,15 @@ def term():
 
     stack.append("term")
 
-    factor()  # Consume a Factor
-    while iNextToken < len(tokenStream) and \
-        (tokenStream[iNextToken] == "multOp"):
+    result = factor()  # Consume a Factor
+    while iNextToken < len(tokenStream) and (tokenStream[iNextToken] == "multOp"):
+            op = lexemeStream[iNextToken]
             iNextToken += 1  # Consumed the * or / token
-            factor()  # Consume another Factor
+            value = factor()  # Consume another Factor
+            result = operators[op](result, value)
+
     stack.pop()
+    return result
 
 
 def factor():
@@ -347,23 +391,39 @@ def factor():
 
     if iNextToken < len(tokenStream):
         # check if any literal (char not implemented)
-        if tokenStream[iNextToken] in literals:
+        if tokenStream[iNextToken] == "intLiteral":
             iNextToken += 1
             stack.pop()
-            return
+            return int(lexemeStream[iNextToken - 1])
+        elif tokenStream[iNextToken] == "boolLiteral":
+            iNextToken += 1
+            stack.pop()
+            return lexemeStream[iNextToken - 1]  # might need to convert?
+        elif tokenStream[iNextToken] == "floatLiteral":
+            iNextToken += 1
+            stack.pop()
+            return float(lexemeStream[iNextToken - 1])
+        elif tokenStream[iNextToken] == "charLiteral":
+            iNextToken += 1
+            stack.pop()
+            return lexemeStream[iNextToken - 1]
         elif tokenStream[iNextToken] == "(":
             # beginning of (Expression)
             iNextToken += 1
-            expr()
+            value = expr()
             if iNextToken < len(tokenStream) and tokenStream[iNextToken] == ")":
                 iNextToken += 1
+                stack.pop()
+                return value
             else:
                 error("Expected closing parenthesis.")
         else:
-            id(False)
+            # id
+            value = id(False)
+            stack.pop()
+            return value
     else:
         error()
-    stack.pop()
 
 
 def error(message = ""):

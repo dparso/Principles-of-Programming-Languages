@@ -17,6 +17,12 @@ id	var2
 assignOp	=
 floatLiteral	10.0
 ;	;
+print	print
+id	var1
+;	;
+print	print
+id	var2
+;	;
 if	if
 (	(
 id	var2
