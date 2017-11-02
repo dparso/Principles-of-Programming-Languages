@@ -345,6 +345,10 @@ def expr():
     while iNextToken < len(tokenStream) and (tokenStream[iNextToken] == "||"):
         iNextToken += 1  # consume ||
         value = conjunction()  # consume another conjunction
+
+        # rather than keeping track of the type all throughout the expression, we
+        # can just make sure the operations being performed have compatiable types
+        typeCheck(result, value)
         result = result or conjunction
 
     stack.pop()
@@ -360,6 +364,7 @@ def conjunction():
     while iNextToken < len(tokenStream) and tokenStream[iNextToken] == "&&":
         iNextToken += 1
         value = equality()
+        typeCheck(result, value)
         result = result and value
 
     stack.pop()
@@ -376,6 +381,7 @@ def equality():
         op = lexemeStream[iNextToken]
         iNextToken += 1
         value = relation()
+        typeCheck(result, value)
         result = operators[op](result, value)
 
     stack.pop()
@@ -407,6 +413,7 @@ def addition():
         op = lexemeStream[iNextToken]
         iNextToken += 1  # Consumed the + or - token
         value = term()  # Consume another Term
+        typeCheck(result, value)
         result = operators[op](result, value)
 
     stack.pop()
@@ -423,6 +430,7 @@ def term():
             op = lexemeStream[iNextToken]
             iNextToken += 1  # Consumed the * or / token
             value = factor()  # Consume another Factor
+            typeCheck(result, value)
             result = operators[op](result, value)
 
     stack.pop()
@@ -487,6 +495,18 @@ def error(message=""):
 def declarationError(varName):
     print("ERROR: Variable not declared: " + varName)
     exit()
+
+
+# raise an error if the types of arguments are incompatible
+def typeCheck(a, b):
+    nums = [int, float]
+    other = [bool, str]
+
+    if type(a) in nums:
+        if type(b) in other:
+            error("Type error. Mismatched types.")
+    elif type(b) in nums:
+        error("Type error. Mismatched types.")
 
 
 # To take command line argument for the file name
