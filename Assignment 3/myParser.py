@@ -164,7 +164,7 @@ def statements():
 
     stack.pop()
 
-
+# source tells whether we've come from a while loop so we can act accordingly
 def statement(execute=True):
     global iNextToken, stack, symTable
 
@@ -205,7 +205,30 @@ def assignment(varName, execute=True):
     if iNextToken < len(tokenStream) and tokenStream[iNextToken] == "assignOp":
         iNextToken += 1
         value = expr()
-        # check types!
+
+        # this will be a string
+        xType = symTable[varName][0]
+        # so we convert it to Python's syntax for string comparison
+        xStr = "<type '" + xType + "'>"
+
+        # this will be a type of the form <type 'int'>, etc.
+        yType = type(value)
+
+        isError = False
+        if xStr != str(yType):
+            # any mismatch is an error except float = int
+            isError = True
+            # remember, we check a string, not a type
+            if xType == 'float':
+                    # float can be assigned an int
+                    # here we use int rather than 'int', as yType was a type
+                    if yType == int:
+                        isError = False
+
+        if isError:
+            error("Type error. Invalid assignment.")
+
+
         if execute:
             symTable[varName][1] = value
         closeStatement()
@@ -246,7 +269,10 @@ def ifStmt(execute=True):
     else:
         error("Incomplete if statement")
 
-    # careful with what's executed: an inner if might not run if its outer loop doesn't
+    """ careful with what's executed: an inner if might not run if its outer loop doesn't
+    technically this doesn't matter here, as we can't have nested loops, but would be
+    very important otherwise
+    """
     if execute:
         statement(bool(result))
     else:
@@ -261,8 +287,15 @@ def ifStmt(execute=True):
     stack.pop()
 
 
-def whileStmt(execute=True):
+def whileStmt(execute=True, restart=None):
     global iNextToken, stack
+
+    if restart:
+        # we're in the middle of the iteration of a loop: reset iNextToken
+        iNextToken = restart
+
+    # remember where we are so the next iteration can repeat
+    startPoint = iNextToken
 
     stack.append("while")
 
@@ -281,6 +314,8 @@ def whileStmt(execute=True):
     # see ifStmt for logic
     if execute:
         statement(bool(result))
+        # should only repeat when the inner statement is executed
+        whileStmt(bool(result), startPoint)
     else:
         statement(False)
 
