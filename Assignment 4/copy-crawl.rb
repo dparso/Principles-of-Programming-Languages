@@ -2,7 +2,7 @@ load "open-uri.rb"
 require "Addressable"
 
 class WebCrawler
-	@@verbose = false
+	@@verbose = true
 	@@protocol = "http"
 	@@visitedLinks = []
 	@@brokenLinks = []
@@ -33,8 +33,8 @@ class WebCrawler
 	end
 
 	def inDomain?(url, currURL)
-		#if ( url =~ /.bowdoin.edu#{Regexp.escape("/")}catalogue/ )
-		if ( url =~ /bowdoin.edu/ )
+		if ( url =~ /.bowdoin.edu#{Regexp.escape("/")}catalogue/ )
+		#if ( url =~ /bowdoin.edu/ )
 			true
 		else
 			#check for relative
@@ -42,18 +42,9 @@ class WebCrawler
 		end
 	end
 
-	# Note: very easy basic combination:
-		# base = Addressable::URI.parse(currURL)
-		# return base + link
-
-
-	# split path into sections
-	def getParts(link)
-		path = URI(link).path
-		if path
-			parts = path.split("/")
-			return parts
-		end
+	def thing(link, currURL)
+		base = Addressable::URI.parse(currURL)
+		return base + link
 	end
 
 	# takes a relative link and a URL, returns an absolute link
@@ -62,7 +53,7 @@ class WebCrawler
 			# relative link: create absolute link
 
 			# .edu/pigs/index.html should be treated as .edu/pigs
-			directory = /(.*.edu#{Regexp.escape("/")}).*\w+#{Regexp.escape(".")}.+$/.match(currURL)
+			directory = /(.*#{Regexp.escape("/")})\w+#{Regexp.escape(".")}\w+$/.match(currURL)
 			if directory
 				currURL = directory[1]
 			end
@@ -71,11 +62,11 @@ class WebCrawler
 			if currURL[-1] == "/"
 				currURL = currURL[0..-2]
 			end
+
 			# if the link starts with "/", don't just append
 			if ( link =~ /^#{Regexp.escape("/")}/ )
 				domain = URI.parse(currURL).host
 				link = "http://" + domain + link
-				return link
 			else
 				# is ../ the start?
 				if ( link =~ /^..#{Regexp.escape("/")}/ )
@@ -98,24 +89,20 @@ class WebCrawler
 					end
 				else
 					# normal relative link - add to end
-
-					currParts = getParts(currURL)
-					linkParts = getParts(link)
-					# lead to infinite repeats
-					if currParts and linkParts
-						if currParts[-1] == linkParts[0] or currParts[-1] == linkParts[0]
+					ending = /.*#{Regexp.escape("/")}([^#{Regexp.escape("/")}]*)$/.match(currURL)
+					if ending
+						toMatch = ending[1]
+						if ( link =~ /^#{toMatch}/ )
 							puts "Repeats, avoiding " + link
 							return currURL
 						else
 							return currURL + "/" + link
 						end
-					else
-						return currURL
 					end
+
 				end
 			end
 		else
-			# not relative
 			return link
 		end
 	end
@@ -123,46 +110,50 @@ class WebCrawler
 	def checkLinks(links, currURL)
 		links.each do |link|
 			link = makeAbsolute(link, currURL)
-			if link and not link.length > 120
-				# if site is in bowdoin.edu
-				if inDomain?(link, currURL)
-					# SPECIAL CASES:
-					# leads to endless exploration (anchors)
-					if ( link =~ /#{Regexp.escape("/")}#/ )
-						@@brokenLinks.push(link)
-						@@allLinks.push(link)
-						next
-					end
-					# links nonresponsive, stall program
-					if ( link =~ /academic.bowdoin/ )
-						@@brokenLinks.push(link)
-						@@allLinks.push(link)
-						next
-					end
 
-					# if not already visited
-					# MUCH more efficient would be a tree for lg n search & insert, based on directories
-					if not @@visitedLinks.include? link
-						# either add to broken or explore
-						if broken?(link)
-							if @@verbose
-								puts "Link is broken " + link
-							end
-							# more efficient than looping through brokenLinks for every single link
-							if not @@brokenLinks.include? link
-								@@brokenLinks.push(link)
-								@@allLinks.push(link)
-							end
-						else
-							puts "Exploring " + link
+			puts "HERE:\n"
+			puts link
+			puts thing(link, currURL)
+			puts "DONE\n"
+
+			# if site is in bowdoin.edu
+			if inDomain?(link, currURL)
+
+				# SPECIAL CASES:
+				# leads to endless exploration (anchors)
+				if ( link =~ /#{Regexp.escape("/")}#/ )
+					@@brokenLinks.push(link)
+					@@allLinks.push(link)
+					next
+				end
+				# links nonresponsive, stall program
+				if ( link =~ /academic.bowdoin/ )
+					@@brokenLinks.push(link)
+					@@allLinks.push(link)
+					next
+				end
+
+				# if not already visited
+				if not @@visitedLinks.include? link
+					# either add to broken or explore
+					if broken?(link)
+						if @@verbose
+							puts "Link is broken " + link
+						end
+						# more efficient than looping through brokenLinks for every single link
+						if not @@brokenLinks.include? link
+							@@brokenLinks.push(link)
 							@@allLinks.push(link)
-							@@visitedLinks.push(link)
-							explore(link)
 						end
 					else
-						if @@verbose
-							puts "Already visited: " + link
-						end
+						puts "Exploring " + link
+						@@allLinks.push(link)
+						@@visitedLinks.push(link)
+						explore(link)
+					end
+				else
+					if @@verbose
+						puts "Already visited: " + link
 					end
 				end
 			end
@@ -171,10 +162,6 @@ class WebCrawler
 
 	def explore(url)
 		#while not @@allLinks.empty?
-		if @@visitedLinks.length % 500 == 0
-			puts "Hello, here is info:"
-			results()
-		end
 			begin
 				webPage = open(url).read
 				links = getLinks(url, webPage)
@@ -183,7 +170,6 @@ class WebCrawler
 					puts links
 					puts "***************************\n\n"
 				end	
-
 				checkLinks(links, url)
 			rescue
 				puts "Error: "
@@ -207,9 +193,12 @@ end
 
 url = "http://www.bowdoin.edu"
 
-w = WebCrawler.new("http://www.bowdoin.edu")
-
+w = WebCrawler.new("http://www.bowdoin.edu/catalogue/overview/index.shtml")
+#w = WebCrawler.new("http://www.bowdoin.edu/")
+#puts w.broken?("http://www.bowdoin.edu/~mirfan/TestCrawler")
 w.explore(w.root)
 w.results()
+
+#w.thing("/overview/index.shtml", "http://www.bowdoin.edu/catalogue/overview/index.shtml")
 
 # question: more efficient to re-check broken links, or always check if in brokenLinks also? (probably the former, constant time)
